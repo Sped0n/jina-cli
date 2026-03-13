@@ -1,6 +1,6 @@
 # jina-cli
 
-[MCP version](https://github.com/jina-ai/jina-mcp) | [CLI version](https://github.com/jina-ai/cli)
+[MCP version](https://github.com/jina-ai/MCP)
 
 All Jina AI APIs as Unix commands. Search, read, embed, rerank - with pipes.
 
