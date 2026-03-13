@@ -31,6 +31,9 @@ dependencies = [
     "click>=8.1.0",
 ]
 
+[project.optional-dependencies]
+test = ["pytest>=8.0"]
+
 [project.urls]
 Homepage = "https://jina.ai"
 Documentation = "https://github.com/jina-ai/cli#readme"
