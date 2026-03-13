@@ -103,7 +103,8 @@ cat items.txt | jina dedup -k 10
 ### Screenshot
 
 ```bash
-jina screenshot https://example.com
+jina screenshot https://example.com                        # prints screenshot URL
+jina screenshot https://example.com -o page.png            # saves to file
 jina screenshot https://example.com --full-page -o page.jpg
 ```
 
@@ -119,7 +120,7 @@ jina bibtex "transformer" --author Vaswani --year 2017
 ```bash
 jina pdf https://arxiv.org/pdf/2301.12345
 jina pdf 2301.12345                        # arXiv ID shorthand
-jina pdf paper.pdf --type figure,table
+jina pdf https://example.com/paper.pdf --type figure,table
 ```
 
 ## JSON output

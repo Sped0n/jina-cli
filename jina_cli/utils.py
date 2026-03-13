@@ -2,7 +2,6 @@
 
 import sys
 import json
-import select
 
 
 def read_stdin_lines() -> list[str]:
@@ -15,37 +14,6 @@ def read_stdin_lines() -> list[str]:
         if stripped:
             lines.append(stripped)
     return lines
-
-
-def has_stdin() -> bool:
-    """Check if there is data available on stdin."""
-    if sys.stdin.isatty():
-        return False
-    ready, _, _ = select.select([sys.stdin], [], [], 0.0)
-    return bool(ready)
-
-
-def format_search_results(results: list[dict], as_json: bool = False) -> str:
-    """Format search results for display."""
-    if as_json:
-        return json.dumps(results, indent=2, ensure_ascii=False)
-
-    lines = []
-    for i, r in enumerate(results):
-        title = r.get("title", "")
-        url = r.get("url", "")
-        snippet = r.get("snippet", r.get("description", ""))
-        date = r.get("date", "")
-
-        lines.append(f"[{i + 1}] {title}")
-        if url:
-            lines.append(f"    {url}")
-        if date:
-            lines.append(f"    {date}")
-        if snippet:
-            lines.append(f"    {snippet}")
-        lines.append("")
-    return "\n".join(lines)
 
 
 def format_bibtex_results(results: list[dict], as_json: bool = False) -> str:

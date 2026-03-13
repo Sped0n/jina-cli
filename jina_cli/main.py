@@ -201,37 +201,21 @@ def search(ctx, query, arxiv, ssrn, images, blog, num, tbs, location, gl, hl, as
     try:
         if blog:
             result = api.search_blog(query, api_key=key, num=num, tbs=tbs_val, as_json=as_json)
-            if as_json and isinstance(result, dict):
-                click.echo(json.dumps(result, indent=2, ensure_ascii=False))
-            else:
-                click.echo(result)
         elif arxiv:
             result = api.search_arxiv(query, api_key=key, num=num, tbs=tbs_val, as_json=as_json)
-            if as_json and isinstance(result, dict):
-                click.echo(json.dumps(result, indent=2, ensure_ascii=False))
-            else:
-                click.echo(result)
         elif ssrn:
             result = api.search_ssrn(query, api_key=key, num=num, tbs=tbs_val, as_json=as_json)
-            if as_json and isinstance(result, dict):
-                click.echo(json.dumps(result, indent=2, ensure_ascii=False))
-            else:
-                click.echo(result)
         elif images:
             result = api.search_images(query, api_key=key, num=num, tbs=tbs_val, gl=gl, hl=hl, as_json=as_json)
-            if as_json and isinstance(result, dict):
-                click.echo(json.dumps(result, indent=2, ensure_ascii=False))
-            else:
-                click.echo(result)
         else:
             result = api.search_web(
                 query, api_key=key, num=num, tbs=tbs_val,
                 location=location, gl=gl, hl=hl, as_json=as_json,
             )
-            if as_json and isinstance(result, dict):
-                click.echo(json.dumps(result, indent=2, ensure_ascii=False))
-            else:
-                click.echo(result)
+        if as_json and isinstance(result, dict):
+            click.echo(json.dumps(result, indent=2, ensure_ascii=False))
+        else:
+            click.echo(result)
     except Exception as e:
         utils.handle_http_error(e)
 
@@ -290,7 +274,7 @@ def embed(ctx, text, model, task, dimensions, as_json, api_key):
 @cli.command()
 @click.argument("query")
 @click.option("-n", "--top-n", type=int, default=None, help="Max results to return")
-@click.option("--model", default="jina-reranker-v2-base-multilingual", help="Reranker model")
+@click.option("--model", default="jina-reranker-v3", help="Reranker model")
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
 @click.option("--api-key", default=None, help="Jina API key")
 @click.pass_context
@@ -363,7 +347,7 @@ def dedup(ctx, k, as_json, api_key):
 @cli.command()
 @click.argument("url", required=False)
 @click.option("--full-page", is_flag=True, help="Capture full page (not just viewport)")
-@click.option("-o", "--output", default=None, help="Save to file (default: stdout as base64)")
+@click.option("-o", "--output", default=None, help="Save image to file")
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
 @click.option("--api-key", default=None, help="Jina API key")
 @click.pass_context
@@ -392,24 +376,55 @@ def screenshot(ctx, url, full_page, output, as_json, api_key):
 
     try:
         result = api.screenshot_url(url, api_key=key, full_page=full_page)
+        data = result.get("data", result)
+
         if as_json:
-            click.echo(json.dumps(result, indent=2, ensure_ascii=False))
-        elif output:
-            # Extract image data and save
-            data = result.get("data", result)
+            # Strip base64 image data from JSON output to keep it readable
+            clean = dict(result)
             if isinstance(data, dict):
-                img_data = data.get("screenshot", data.get("image", ""))
-            else:
-                img_data = str(data)
-            if img_data.startswith("data:"):
-                # Strip data URI prefix
-                img_data = img_data.split(",", 1)[1] if "," in img_data else img_data
-            import base64
-            with open(output, "wb") as f:
-                f.write(base64.b64decode(img_data))
-            click.echo(f"Saved to {output}", err=True)
+                clean_data = dict(data)
+                for field in ("screenshot", "screenshotUrl", "pageshotUrl"):
+                    val = clean_data.get(field, "")
+                    if isinstance(val, str) and len(val) > 1000:
+                        clean_data[field] = f"<base64 {len(val)} chars>"
+                clean["data"] = clean_data
+            click.echo(json.dumps(clean, indent=2, ensure_ascii=False))
         else:
-            click.echo(json.dumps(result, indent=2, ensure_ascii=False))
+            # Extract image URL or base64 data
+            img_url = None
+            img_b64 = None
+            if isinstance(data, dict):
+                img_url = data.get("screenshotUrl") or data.get("pageshotUrl")
+                if not img_url:
+                    img_b64 = data.get("screenshot", data.get("image", ""))
+            if output:
+                # Save to file
+                import base64
+                if img_url:
+                    # Download from URL
+                    with api._client() as client:
+                        resp = client.get(img_url)
+                        resp.raise_for_status()
+                        with open(output, "wb") as f:
+                            f.write(resp.content)
+                elif img_b64:
+                    if img_b64.startswith("data:"):
+                        img_b64 = img_b64.split(",", 1)[1] if "," in img_b64 else img_b64
+                    with open(output, "wb") as f:
+                        f.write(base64.b64decode(img_b64))
+                click.echo(f"Saved to {output}", err=True)
+            else:
+                # No output file: print URL or warn about binary
+                if img_url:
+                    click.echo(img_url)
+                else:
+                    click.echo(
+                        "Error: screenshot is binary image data.\n"
+                        "Fix: save to file with -o flag\n"
+                        "  jina screenshot URL -o screenshot.png",
+                        err=True,
+                    )
+                    sys.exit(1)
     except Exception as e:
         utils.handle_http_error(e)
 
@@ -418,7 +433,7 @@ def screenshot(ctx, url, full_page, output, as_json, api_key):
 
 
 @cli.command()
-@click.argument("query")
+@click.argument("query", required=False)
 @click.option("--author", default=None, help="Filter by author name")
 @click.option("--year", type=int, default=None, help="Filter by year (minimum)")
 @click.option("-n", "--num", default=10, type=int, help="Number of results (default: 10)")
@@ -436,6 +451,16 @@ def bibtex(ctx, query, author, year, num, as_json, api_key):
         jina bibtex "transformer" --author Vaswani --year 2017
         jina bibtex "BERT" --json
     """
+    if not query:
+        stdin_lines = utils.read_stdin_lines()
+        if stdin_lines:
+            query = " ".join(stdin_lines)
+    if not query:
+        _short_usage(
+            "Usage: jina bibtex QUERY",
+            ["jina bibtex \"attention is all you need\"",
+             "jina bibtex \"transformer\" --author Vaswani --year 2017"],
+        )
     key = api_key or ctx.obj.get("api_key")
 
     try:
@@ -449,7 +474,7 @@ def bibtex(ctx, query, author, year, num, as_json, api_key):
 
 
 @cli.command()
-@click.argument("query")
+@click.argument("query", required=False)
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
 @click.option("--api-key", default=None, help="Jina API key")
 @click.pass_context
@@ -460,7 +485,18 @@ def expand(ctx, query, as_json, api_key):
     Examples:
         jina expand "machine learning"
         jina expand "climate change effects" --json
+        echo "query" | jina expand
     """
+    if not query:
+        stdin_lines = utils.read_stdin_lines()
+        if stdin_lines:
+            query = " ".join(stdin_lines)
+    if not query:
+        _short_usage(
+            "Usage: jina expand QUERY",
+            ["jina expand \"machine learning\"",
+             "echo \"query\" | jina expand"],
+        )
     key = api_key or ctx.obj.get("api_key")
 
     try:

@@ -3,13 +3,11 @@
 import os
 import sys
 import json
-import base64
 
 import httpx
 
 API_BASE = "https://api.jina.ai"
 READER_BASE = "https://r.jina.ai"
-SEARCH_BASE = "https://s.jina.ai"
 SEARCH_SVIP_BASE = "https://svip.jina.ai"
 DEFAULT_TIMEOUT = 30.0
 
@@ -288,6 +286,7 @@ def embed(
     model: str = "jina-embeddings-v3",
     task: str = "text-matching",
     dimensions: int | None = None,
+    late_chunking: bool = False,
 ) -> list[dict]:
     """Generate embeddings for texts."""
     key = require_api_key(api_key)
@@ -303,6 +302,8 @@ def embed(
     }
     if dimensions:
         body["dimensions"] = dimensions
+    if late_chunking:
+        body["late_chunking"] = True
 
     with _client() as client:
         resp = client.post(f"{API_BASE}/v1/embeddings", headers=headers, json=body)
@@ -318,7 +319,7 @@ def rerank(
     query: str,
     documents: list[str],
     api_key: str | None = None,
-    model: str = "jina-reranker-v2-base-multilingual",
+    model: str = "jina-reranker-v3",
     top_n: int | None = None,
 ) -> list[dict]:
     """Rerank documents by relevance to query."""
@@ -372,11 +373,11 @@ def deduplicate(
 
     key = require_api_key(api_key)
 
-    # Get embeddings
+    # Get embeddings (v5-text-small is faster and sufficient for dedup)
     embeddings_data = embed(
         strings,
         api_key=key,
-        model="jina-embeddings-v3",
+        model="jina-embeddings-v5-text-small",
         task="text-matching",
     )
     embeddings = [item["embedding"] for item in embeddings_data]
