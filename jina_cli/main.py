@@ -46,7 +46,24 @@ class AliasedGroup(click.Group):
             )
 
 
-@click.group(cls=AliasedGroup)
+def _short_usage(usage: str, examples: list[str]) -> None:
+    """Print short usage (layer 1) instead of full --help (layer 2).
+
+    Progressive disclosure:
+      Layer 0: `jina`           -> command list
+      Layer 1: `jina search`    -> usage + examples (this function)
+      Layer 2: `jina search -h` -> full options
+    """
+    lines = [usage, ""]
+    for ex in examples:
+        lines.append(f"  {ex}")
+    lines.append("")
+    lines.append("Run with --help for all options.")
+    click.echo("\n".join(lines), err=True)
+    sys.exit(1)
+
+
+@click.group(cls=AliasedGroup, invoke_without_command=True)
 @click.version_option(__version__, prog_name="jina")
 @click.option("--api-key", envvar="JINA_API_KEY", default=None, hidden=True,
               help="Jina API key (or set JINA_API_KEY env var)")
@@ -61,6 +78,26 @@ def cli(ctx, api_key):
     """
     ctx.ensure_object(dict)
     ctx.obj["api_key"] = api_key
+    if ctx.invoked_subcommand is None:
+        click.echo(
+            "jina - all Jina AI APIs in one command\n"
+            "\n"
+            "  jina read URL              Extract markdown from web pages\n"
+            "  jina search QUERY          Web search (also --arxiv, --ssrn, --images, --blog)\n"
+            "  jina embed TEXT             Generate embeddings\n"
+            "  jina rerank QUERY          Rerank documents from stdin by relevance\n"
+            "  jina dedup                 Deduplicate text from stdin\n"
+            "  jina screenshot URL        Capture screenshot of a URL\n"
+            "  jina bibtex QUERY          Search BibTeX citations\n"
+            "  jina expand QUERY          Expand query into related queries\n"
+            "  jina pdf URL               Extract figures/tables from PDFs\n"
+            "  jina datetime URL          Guess publish/update date of a URL\n"
+            "  jina primer                Context info (time, location, network)\n"
+            "\n"
+            "Run any command without arguments for usage examples.\n"
+            "Run any command with --help for full options.\n"
+            "API key: export JINA_API_KEY=your-key (https://jina.ai/?sui=apikey)"
+        )
 
 
 # -- read --
@@ -97,8 +134,12 @@ def read(ctx, url, links, images, as_json, api_key):
             urls = [line.strip() for line in stdin_lines if line.strip().startswith(("http://", "https://"))]
 
     if not urls:
-        click.echo(click.get_current_context().get_help())
-        sys.exit(1)
+        _short_usage(
+            "Usage: jina read URL",
+            ["jina read https://example.com",
+             "echo URL | jina read",
+             "cat urls.txt | jina read"],
+        )
 
     try:
         for u in urls:
@@ -147,8 +188,12 @@ def search(ctx, query, arxiv, ssrn, images, blog, num, tbs, location, gl, hl, as
         if stdin_lines:
             query = " ".join(stdin_lines)
     if not query:
-        click.echo(click.get_current_context().get_help())
-        sys.exit(1)
+        _short_usage(
+            "Usage: jina search QUERY [--arxiv|--ssrn|--images|--blog]",
+            ["jina search \"transformer architecture\"",
+             "jina search --arxiv \"attention mechanism\"",
+             "jina search \"AI\" | jina rerank \"embeddings\""],
+        )
 
     key = api_key or ctx.obj.get("api_key")
     tbs_val = f"qdr:{tbs}" if tbs else None
@@ -225,8 +270,12 @@ def embed(ctx, text, model, task, dimensions, as_json, api_key):
         texts = stdin_lines
 
     if not texts:
-        click.echo(click.get_current_context().get_help())
-        sys.exit(1)
+        _short_usage(
+            "Usage: jina embed TEXT [TEXT ...]",
+            ["jina embed \"hello world\"",
+             "echo \"hello\" | jina embed",
+             "cat texts.txt | jina embed --json"],
+        )
 
     try:
         result = api.embed(texts, api_key=key, model=model, task=task, dimensions=dimensions)
@@ -335,8 +384,11 @@ def screenshot(ctx, url, full_page, output, as_json, api_key):
             url = stdin_lines[0].strip()
 
     if not url:
-        click.echo(click.get_current_context().get_help())
-        sys.exit(1)
+        _short_usage(
+            "Usage: jina screenshot URL",
+            ["jina screenshot https://example.com",
+             "jina screenshot URL --full-page -o page.jpg"],
+        )
 
     try:
         result = api.screenshot_url(url, api_key=key, full_page=full_page)
@@ -471,8 +523,12 @@ def pdf(ctx, url_or_id, arxiv_id, extract_type, max_edge, as_json, api_key):
                 arxiv_id = val
 
     if not url and not arxiv_id:
-        click.echo(click.get_current_context().get_help())
-        sys.exit(1)
+        _short_usage(
+            "Usage: jina pdf URL_OR_ARXIV_ID",
+            ["jina pdf https://arxiv.org/pdf/2301.12345",
+             "jina pdf 2301.12345",
+             "jina pdf paper.pdf --type figure,table"],
+        )
 
     try:
         result = api.extract_pdf(
@@ -505,8 +561,11 @@ def datetime_cmd(ctx, url, as_json):
             url = stdin_lines[0].strip()
 
     if not url:
-        click.echo(click.get_current_context().get_help())
-        sys.exit(1)
+        _short_usage(
+            "Usage: jina datetime URL",
+            ["jina datetime https://example.com/article",
+             "echo URL | jina datetime"],
+        )
 
     try:
         result = api.guess_datetime(url)
