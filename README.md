@@ -1,5 +1,7 @@
 # jina-cli
 
+[MCP version](https://github.com/jina-ai/jina-mcp) | [CLI version](https://github.com/jina-ai/cli)
+
 All Jina AI APIs as Unix commands. Search, read, embed, rerank - with pipes.
 
 This CLI is designed for both humans and AI agents. An agent with shell access needs only `run(command="jina search ...")` instead of managing 20 separate tool definitions. The CLI supports pipes, chaining (`&&`, `||`, `;`), and `--help` for self-discovery.
