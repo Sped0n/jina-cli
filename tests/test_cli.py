@@ -5,10 +5,14 @@ Requires JINA_API_KEY env var (set via GitHub Secrets in CI).
 
 import json
 import os
+import re
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
+
+from jina_cli import __version__
 
 # Skip all tests if no API key
 pytestmark = pytest.mark.skipif(
@@ -203,6 +207,24 @@ class TestHelp:
         r = run_jina("rea")
         assert r.returncode != 0
         assert "read" in r.stderr.lower() or "rerank" in r.stderr.lower()
+
+
+class TestVersion:
+    def test_version_matches_pyproject(self):
+        r = run_jina("--version")
+        match = re.search(
+            r'^version = "([^"]+)"$',
+            (Path(__file__).resolve().parents[1] / "pyproject.toml").read_text(
+                encoding="utf-8"
+            ),
+            re.MULTILINE,
+        )
+
+        assert match is not None
+        assert __version__ == match.group(1)
+        assert r.returncode == 0
+        assert r.stdout.strip() == f"jina, version {__version__}"
+        assert r.stderr == ""
 
 
 class TestErrorHandling:
