@@ -1,11 +1,14 @@
-"""Unit tests for retry and timeout behavior in jina_cli.api."""
+"""Local tests for API helpers and CLI behavior without live network calls."""
 
+import json
+from click.testing import CliRunner
 from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock, patch
 
 import httpx
 
 from jina_cli import api
+from jina_cli.main import cli
 
 
 def make_response(
@@ -201,3 +204,189 @@ class TestTimeoutHelpers:
 
     def test_effective_timeout_prefers_override(self):
         assert api._effective_timeout(12.5) == 12.5
+
+
+class TestCliLocal:
+    def test_search_human_readable_formats_results(self):
+        runner = CliRunner()
+        result_payload = {
+            "results": [
+                {
+                    "title": "Jina AI",
+                    "url": "https://jina.ai",
+                    "snippet": "Search foundation models.",
+                }
+            ]
+        }
+
+        with patch(
+            "jina_cli.main.api.search_web", return_value=result_payload
+        ) as search_web:
+            result = runner.invoke(cli, ["search", "jina ai", "-n", "2"])
+
+        assert result.exit_code == 0
+        assert "Jina AI" in result.output
+        assert "https://jina.ai" in result.output
+        assert "Search foundation models." in result.output
+        search_web.assert_called_once()
+        _, kwargs = search_web.call_args
+        assert search_web.call_args.args == ("jina ai",)
+        assert kwargs["num"] == 2
+        assert kwargs["tbs"] is None
+        assert kwargs["location"] is None
+        assert kwargs["gl"] is None
+        assert kwargs["hl"] is None
+        assert kwargs["as_json"] is True
+        assert kwargs["timeout"] is None
+
+    def test_search_arxiv_routes_to_arxiv_api(self):
+        runner = CliRunner()
+
+        with patch(
+            "jina_cli.main.api.search_arxiv",
+            return_value={"results": [{"title": "Attention Is All You Need"}]},
+        ) as search_arxiv:
+            result = runner.invoke(cli, ["search", "--arxiv", "attention", "--json"])
+
+        assert result.exit_code == 0
+        assert (
+            json.loads(result.output)["results"][0]["title"]
+            == "Attention Is All You Need"
+        )
+        search_arxiv.assert_called_once()
+        _, kwargs = search_arxiv.call_args
+        assert search_arxiv.call_args.args == ("attention",)
+        assert kwargs["num"] == 5
+        assert kwargs["tbs"] is None
+        assert kwargs["as_json"] is True
+        assert kwargs["timeout"] is None
+
+    def test_embed_reads_stdin_and_formats_output(self):
+        runner = CliRunner()
+
+        with patch(
+            "jina_cli.main.api.embed",
+            return_value=[{"index": 0, "embedding": [0.1, 0.2, 0.3]}],
+        ) as embed:
+            result = runner.invoke(cli, ["embed"], input="hello world\n")
+
+        assert result.exit_code == 0
+        assert "dim=3" in result.output
+        embed.assert_called_once()
+        _, kwargs = embed.call_args
+        assert embed.call_args.args == (["hello world"],)
+        assert kwargs["model"] == "jina-embeddings-v5-text-small"
+        assert kwargs["task"] == "text-matching"
+        assert kwargs["dimensions"] is None
+        assert kwargs["timeout"] is None
+
+    def test_rerank_uses_stdin_documents(self):
+        runner = CliRunner()
+
+        with patch(
+            "jina_cli.main.api.rerank",
+            return_value=[{"index": 1, "relevance_score": 0.9}],
+        ) as rerank:
+            result = runner.invoke(cli, ["rerank", "pet"], input="cat\ndog\n")
+
+        assert result.exit_code == 0
+        assert "[0.9000] dog" in result.output
+        rerank.assert_called_once()
+        _, kwargs = rerank.call_args
+        assert rerank.call_args.args == ("pet", ["cat", "dog"])
+        assert kwargs["model"] == "jina-reranker-v3"
+        assert kwargs["top_n"] is None
+        assert kwargs["timeout"] is None
+
+    def test_dedup_uses_stdin_lines(self):
+        runner = CliRunner()
+
+        with patch(
+            "jina_cli.main.api.deduplicate",
+            return_value=[{"text": "hello world"}],
+        ) as deduplicate:
+            result = runner.invoke(cli, ["dedup"], input="hello world\nhello world\n")
+
+        assert result.exit_code == 0
+        assert result.output.strip() == "hello world"
+        deduplicate.assert_called_once()
+        _, kwargs = deduplicate.call_args
+        assert deduplicate.call_args.args == (["hello world", "hello world"],)
+        assert kwargs["k"] is None
+        assert kwargs["timeout"] is None
+
+    def test_classify_parses_comma_separated_labels(self):
+        runner = CliRunner()
+
+        with patch(
+            "jina_cli.main.api.classify",
+            return_value=[{"prediction": "positive", "score": 0.9}],
+        ) as classify:
+            result = runner.invoke(
+                cli,
+                ["classify", "great movie", "--labels", "positive,negative"],
+            )
+
+        assert result.exit_code == 0
+        assert "positive (0.9000)" in result.output
+        classify.assert_called_once()
+        _, kwargs = classify.call_args
+        assert classify.call_args.args == (["great movie"], ["positive", "negative"])
+        assert kwargs["model"] == "jina-embeddings-v5-text-small"
+        assert kwargs["timeout"] is None
+
+    def test_expand_prints_each_query(self):
+        runner = CliRunner()
+
+        with patch(
+            "jina_cli.main.api.expand_query",
+            return_value=["embedding models", {"query": "vector search"}],
+        ) as expand_query:
+            result = runner.invoke(cli, ["expand", "search"])
+
+        assert result.exit_code == 0
+        assert result.output.splitlines() == ["embedding models", "vector search"]
+        expand_query.assert_called_once()
+        _, kwargs = expand_query.call_args
+        assert expand_query.call_args.args == ("search",)
+        assert kwargs["timeout"] is None
+
+    def test_screenshot_without_output_prints_image_url(self):
+        runner = CliRunner()
+
+        with patch(
+            "jina_cli.main.api.screenshot_url",
+            return_value={
+                "data": {"screenshotUrl": "https://cdn.example/screenshot.png"}
+            },
+        ) as screenshot_url:
+            result = runner.invoke(cli, ["screenshot", "https://example.com"])
+
+        assert result.exit_code == 0
+        assert result.output.strip() == "https://cdn.example/screenshot.png"
+        screenshot_url.assert_called_once()
+        _, kwargs = screenshot_url.call_args
+        assert screenshot_url.call_args.args == ("https://example.com",)
+        assert kwargs["full_page"] is False
+        assert kwargs["timeout"] is None
+
+    def test_global_timeout_reaches_subcommand(self):
+        runner = CliRunner()
+
+        with patch(
+            "jina_cli.main.api.read_url", return_value="Example Domain"
+        ) as read_url:
+            result = runner.invoke(
+                cli,
+                ["--timeout", "45", "read", "https://example.com"],
+            )
+
+        assert result.exit_code == 0
+        assert "Example Domain" in result.output
+        read_url.assert_called_once()
+        _, kwargs = read_url.call_args
+        assert read_url.call_args.args == ("https://example.com",)
+        assert kwargs["with_links"] is False
+        assert kwargs["with_images"] is False
+        assert kwargs["as_json"] is False
+        assert kwargs["timeout"] == 45.0
