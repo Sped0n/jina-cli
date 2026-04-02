@@ -18,6 +18,7 @@ urls:
 - Add `--links` or `--images` only when you need richer extraction output.
 - Use `jina pdf` for PDF-specific extraction rather than `jina read` when figures, tables, or equations matter.
 - Prefer `--json` if the results will be filtered or fed into a follow-up command.
+- Use the global `--timeout` flag when large pages or PDFs need a longer request window.
 
 ## Examples
 
@@ -37,6 +38,12 @@ Read a page as markdown:
 
 ```bash
 jina read https://example.com
+
+Use a longer timeout for a slow or large page:
+
+```bash
+jina --timeout 60 read https://example.com/large.pdf
+```
 ```
 
 Read multiple URLs from stdin:

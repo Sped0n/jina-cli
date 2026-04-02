@@ -36,7 +36,6 @@ export JINA_API_KEY=your-key-here
 | `jina pdf URL` | Extract figures/tables/equations from PDFs |
 | `jina datetime URL` | Guess publish/update date of a URL |
 | `jina primer` | Context info (time, location, network) |
-| `jina grep PATTERN` | Semantic grep (requires `pip install jina-grep`) |
 
 ## Pipes
 
@@ -176,57 +175,6 @@ result = run(command="jina search 'AI' | jina rerank 'embeddings'")
 ```
 
 No tool catalog needed. The agent discovers capabilities via `jina --help` and `jina search --help`. Errors include actionable guidance.
-
-## Semantic grep
-
-`jina grep` provides semantic search over files using local [Jina embeddings on MLX](https://github.com/jina-ai/jina-grep-cli). It requires a separate install:
-
-```bash
-pip install jina-grep
-```
-
-```bash
-jina grep "error handling" src/
-jina grep -r --threshold 0.3 "database connection" .
-grep -rn "error" src/ | jina grep "retry logic"
-```
-
-Supports most GNU grep flags (`-r`, `-n`, `-l`, `-c`, `-A/-B/-C`, `--include`, `--exclude`) plus semantic flags (`--threshold`, `--top-k`, `--model`). Run `jina grep --help` for full options.
-
-### Server mode
-
-For repeated queries, start a persistent embedding server to avoid model reload:
-
-```bash
-jina grep serve start    # background server, model stays in GPU memory
-jina grep serve stop     # stop when done
-```
-
-## Local mode
-
-`jina embed`, `jina rerank`, `jina classify`, and `jina dedup` support `--local` to run on Apple Silicon via the jina-grep embedding server instead of the Jina API. No API key needed.
-
-```bash
-# Start the local server first
-jina grep serve start
-
-# Local embeddings
-jina embed --local "hello world"
-cat texts.txt | jina embed --local --json
-
-# Local reranking (cosine similarity on local embeddings)
-cat docs.txt | jina rerank --local "machine learning"
-
-# Local classification (cosine similarity on local embeddings)
-jina classify --local "this is great" --labels positive,negative
-
-# Local deduplication
-cat items.txt | jina dedup --local
-```
-
-Local mode uses `jina-embeddings-v5-nano` by default. Override with `--model jina-embeddings-v5-small`.
-
-Requires `pip install jina-grep` and `jina grep serve start`.
 
 ## Design principles
 

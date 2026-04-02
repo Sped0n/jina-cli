@@ -13,7 +13,6 @@ Usage:
     jina pdf URL               Extract figures/tables from PDF
     jina datetime URL          Guess publish date of a URL
     jina primer                Get context info
-    jina grep PATTERN          Semantic grep (requires: pip install jina-grep)
 
 Exit codes:
     0  success
@@ -86,10 +85,16 @@ def _validate_url(url: str) -> str:
 
 @click.group(cls=AliasedGroup, invoke_without_command=True)
 @click.version_option(__version__, prog_name="jina")
-@click.option("--api-key", envvar="JINA_API_KEY", default=None, hidden=True,
-              help="Jina API key (or set JINA_API_KEY env var)")
+@click.option(
+    "--api-key",
+    envvar="JINA_API_KEY",
+    default=None,
+    hidden=True,
+    help="Jina API key (or set JINA_API_KEY env var)",
+)
+@click.option("--timeout", type=float, default=None, help="HTTP timeout in seconds")
 @click.pass_context
-def cli(ctx, api_key):
+def cli(ctx, api_key, timeout):
     """Jina AI CLI - search, read, embed, rerank, and more.
 
     All Jina AI APIs as Unix-friendly commands. Supports pipes and chaining.
@@ -104,6 +109,7 @@ def cli(ctx, api_key):
     utils.setup_signals()
     ctx.ensure_object(dict)
     ctx.obj["api_key"] = api_key
+    ctx.obj["timeout"] = timeout
     if ctx.invoked_subcommand is None:
         click.echo(
             "jina - all Jina AI APIs in one command\n"
@@ -120,7 +126,6 @@ def cli(ctx, api_key):
             "  jina pdf URL               Extract figures/tables from PDFs\n"
             "  jina datetime URL          Guess publish/update date of a URL\n"
             "  jina primer                Context info (time, location, network)\n"
-            "  jina grep PATTERN          Semantic grep (requires: pip install jina-grep)\n"
             "\n"
             "Run any command without arguments for usage examples.\n"
             "Run any command with --help for full options.\n"
@@ -152,6 +157,7 @@ def read(ctx, url, links, images, as_json, api_key):
         cat urls.txt | jina read
     """
     key = api_key or ctx.obj.get("api_key")
+    timeout = ctx.obj.get("timeout")
 
     # Read URL from stdin if not provided
     urls = []
@@ -160,14 +166,20 @@ def read(ctx, url, links, images, as_json, api_key):
     else:
         stdin_lines = utils.read_stdin_lines()
         if stdin_lines:
-            urls = [line.strip() for line in stdin_lines if line.strip().startswith(("http://", "https://"))]
+            urls = [
+                line.strip()
+                for line in stdin_lines
+                if line.strip().startswith(("http://", "https://"))
+            ]
 
     if not urls:
         _short_usage(
             "Usage: jina read URL",
-            ["jina read https://example.com",
-             "echo URL | jina read",
-             "cat urls.txt | jina read"],
+            [
+                "jina read https://example.com",
+                "echo URL | jina read",
+                "cat urls.txt | jina read",
+            ],
         )
 
     for u in urls:
@@ -175,9 +187,20 @@ def read(ctx, url, links, images, as_json, api_key):
 
     try:
         for i, u in enumerate(urls):
-            result = api.read_url(u, api_key=key, with_links=links, with_images=images, as_json=as_json)
+            result = api.read_url(
+                u,
+                api_key=key,
+                with_links=links,
+                with_images=images,
+                as_json=as_json,
+                timeout=timeout,
+            )
             if as_json:
-                click.echo(json.dumps(result, indent=2, ensure_ascii=False) if isinstance(result, dict) else result)
+                click.echo(
+                    json.dumps(result, indent=2, ensure_ascii=False)
+                    if isinstance(result, dict)
+                    else result
+                )
             else:
                 click.echo(result)
     except Exception as e:
@@ -194,15 +217,21 @@ def read(ctx, url, links, images, as_json, api_key):
 @click.option("--images", is_flag=True, help="Search images")
 @click.option("--blog", is_flag=True, help="Search Jina AI blog")
 @click.option("-n", "--num", default=5, type=int, help="Number of results (default: 5)")
-@click.option("--time", "tbs", type=click.Choice(["h", "d", "w", "m", "y"]),
-              help="Time filter: h(our), d(ay), w(eek), m(onth), y(ear)")
+@click.option(
+    "--time",
+    "tbs",
+    type=click.Choice(["h", "d", "w", "m", "y"]),
+    help="Time filter: h(our), d(ay), w(eek), m(onth), y(ear)",
+)
 @click.option("--location", default=None, help="Location for search results")
 @click.option("--gl", default=None, help="Country code (e.g. us, de, jp)")
 @click.option("--hl", default=None, help="Language code (e.g. en, zh-cn)")
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
 @click.option("--api-key", default=None, help="Jina API key")
 @click.pass_context
-def search(ctx, query, arxiv, ssrn, images, blog, num, tbs, location, gl, hl, as_json, api_key):
+def search(
+    ctx, query, arxiv, ssrn, images, blog, num, tbs, location, gl, hl, as_json, api_key
+):
     """Search the web, arXiv, SSRN, images, or Jina blog.
 
     \b
@@ -222,31 +251,60 @@ def search(ctx, query, arxiv, ssrn, images, blog, num, tbs, location, gl, hl, as
     if not query:
         _short_usage(
             "Usage: jina search QUERY [--arxiv|--ssrn|--images|--blog]",
-            ["jina search \"transformer architecture\"",
-             "jina search --arxiv \"attention mechanism\"",
-             "jina search \"AI\" | jina rerank \"embeddings\""],
+            [
+                'jina search "transformer architecture"',
+                'jina search --arxiv "attention mechanism"',
+                'jina search "AI" | jina rerank "embeddings"',
+            ],
         )
 
     key = api_key or ctx.obj.get("api_key")
+    timeout = ctx.obj.get("timeout")
     tbs_val = f"qdr:{tbs}" if tbs else None
 
     try:
         # Always fetch JSON from API, format on CLI side
         if blog:
-            result = api.search_blog(query, api_key=key, num=num, tbs=tbs_val, as_json=True)
+            result = api.search_blog(
+                query, api_key=key, num=num, tbs=tbs_val, as_json=True, timeout=timeout
+            )
         elif arxiv:
-            result = api.search_arxiv(query, api_key=key, num=num, tbs=tbs_val, as_json=True)
+            result = api.search_arxiv(
+                query, api_key=key, num=num, tbs=tbs_val, as_json=True, timeout=timeout
+            )
         elif ssrn:
-            result = api.search_ssrn(query, api_key=key, num=num, tbs=tbs_val, as_json=True)
+            result = api.search_ssrn(
+                query, api_key=key, num=num, tbs=tbs_val, as_json=True, timeout=timeout
+            )
         elif images:
-            result = api.search_images(query, api_key=key, num=num, tbs=tbs_val, gl=gl, hl=hl, as_json=True)
+            result = api.search_images(
+                query,
+                api_key=key,
+                num=num,
+                tbs=tbs_val,
+                gl=gl,
+                hl=hl,
+                as_json=True,
+                timeout=timeout,
+            )
         else:
             result = api.search_web(
-                query, api_key=key, num=num, tbs=tbs_val,
-                location=location, gl=gl, hl=hl, as_json=True,
+                query,
+                api_key=key,
+                num=num,
+                tbs=tbs_val,
+                location=location,
+                gl=gl,
+                hl=hl,
+                as_json=True,
+                timeout=timeout,
             )
         if as_json:
-            click.echo(json.dumps(result, indent=2, ensure_ascii=False) if isinstance(result, dict) else result)
+            click.echo(
+                json.dumps(result, indent=2, ensure_ascii=False)
+                if isinstance(result, dict)
+                else result
+            )
         elif isinstance(result, dict):
             for r in result.get("results", []):
                 title = r.get("title", "")
@@ -268,14 +326,19 @@ def search(ctx, query, arxiv, ssrn, images, blog, num, tbs, location, gl, hl, as
 
 @cli.command()
 @click.argument("text", nargs=-1)
-@click.option("--model", default=None, help="Model name (default: jina-embeddings-v5-text-small, or v5-nano with --local)")
+@click.option(
+    "--model",
+    default=None,
+    help="Model name (default: jina-embeddings-v5-text-small)",
+)
 @click.option("--task", default=None, help="Embedding task type")
-@click.option("--dimensions", type=int, default=None, help="Output dimensions (Matryoshka)")
-@click.option("--local", is_flag=True, help="Use local MLX server (requires: jina-grep serve start)")
+@click.option(
+    "--dimensions", type=int, default=None, help="Output dimensions (Matryoshka)"
+)
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
 @click.option("--api-key", default=None, help="Jina API key")
 @click.pass_context
-def embed(ctx, text, model, task, dimensions, local, as_json, api_key):
+def embed(ctx, text, model, task, dimensions, as_json, api_key):
     """Generate embeddings for text.
 
     Input from arguments or stdin (one text per line).
@@ -286,9 +349,9 @@ def embed(ctx, text, model, task, dimensions, local, as_json, api_key):
         echo "hello world" | jina embed
         jina embed "text1" "text2" "text3"
         cat texts.txt | jina embed --json
-        jina embed --local "hello world"
     """
     key = api_key or ctx.obj.get("api_key")
+    timeout = ctx.obj.get("timeout")
 
     texts = list(text)
     if not texts:
@@ -298,21 +361,24 @@ def embed(ctx, text, model, task, dimensions, local, as_json, api_key):
     if not texts:
         _short_usage(
             "Usage: jina embed TEXT [TEXT ...]",
-            ["jina embed \"hello world\"",
-             "echo \"hello\" | jina embed",
-             "jina embed --local \"hello world\"",
-             "cat texts.txt | jina embed --json"],
+            [
+                'jina embed "hello world"',
+                'echo "hello" | jina embed',
+                "cat texts.txt | jina embed --json",
+            ],
         )
 
     try:
-        if local:
-            _model = model or "jina-embeddings-v5-nano"
-            _task = task or "text-matching"
-            result = api.local_embed(texts, model=_model, task=_task)
-        else:
-            _model = model or "jina-embeddings-v5-text-small"
-            _task = task or "text-matching"
-            result = api.embed(texts, api_key=key, model=_model, task=_task, dimensions=dimensions)
+        _model = model or "jina-embeddings-v5-text-small"
+        _task = task or "text-matching"
+        result = api.embed(
+            texts,
+            api_key=key,
+            model=_model,
+            task=_task,
+            dimensions=dimensions,
+            timeout=timeout,
+        )
         click.echo(utils.format_embeddings(result, as_json=as_json))
     except Exception as e:
         utils.handle_http_error(e)
@@ -324,12 +390,15 @@ def embed(ctx, text, model, task, dimensions, local, as_json, api_key):
 @cli.command()
 @click.argument("query")
 @click.option("-n", "--top-n", type=int, default=None, help="Max results to return")
-@click.option("--model", default=None, help="Reranker model (default: jina-reranker-v3, or v5-nano with --local)")
-@click.option("--local", is_flag=True, help="Use local MLX server (requires: jina-grep serve start)")
+@click.option(
+    "--model",
+    default=None,
+    help="Reranker model (default: jina-reranker-v3)",
+)
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
 @click.option("--api-key", default=None, help="Jina API key")
 @click.pass_context
-def rerank(ctx, query, top_n, model, local, as_json, api_key):
+def rerank(ctx, query, top_n, model, as_json, api_key):
     """Rerank documents by relevance to a query.
 
     Reads documents from stdin, one per line.
@@ -339,25 +408,26 @@ def rerank(ctx, query, top_n, model, local, as_json, api_key):
         jina search "AI" | jina rerank "embeddings"
         cat docs.txt | jina rerank "machine learning"
         echo -e "doc1\\ndoc2\\ndoc3" | jina rerank "query" --top-n 2
-        cat docs.txt | jina rerank --local "machine learning"
     """
     key = api_key or ctx.obj.get("api_key")
+    timeout = ctx.obj.get("timeout")
     documents = utils.read_stdin_lines()
 
     if not documents:
-        click.echo("Error: no documents on stdin.\n"
-                   "Fix: pipe text lines to rerank, one document per line.\n"
-                   "  cat docs.txt | jina rerank \"your query\"\n"
-                   "  jina search \"AI\" | jina rerank \"embeddings\"", err=True)
+        click.echo(
+            "Error: no documents on stdin.\n"
+            "Fix: pipe text lines to rerank, one document per line.\n"
+            '  cat docs.txt | jina rerank "your query"\n'
+            '  jina search "AI" | jina rerank "embeddings"',
+            err=True,
+        )
         sys.exit(EXIT_USER_ERROR)
 
     try:
-        if local:
-            _model = model or "jina-embeddings-v5-nano"
-            result = api.local_rerank(query, documents, model=_model, top_n=top_n)
-        else:
-            _model = model or "jina-reranker-v3"
-            result = api.rerank(query, documents, api_key=key, model=_model, top_n=top_n)
+        _model = model or "jina-reranker-v3"
+        result = api.rerank(
+            query, documents, api_key=key, model=_model, top_n=top_n, timeout=timeout
+        )
         click.echo(utils.format_rerank_results(result, documents, as_json=as_json))
     except Exception as e:
         utils.handle_http_error(e)
@@ -367,12 +437,16 @@ def rerank(ctx, query, top_n, model, local, as_json, api_key):
 
 
 @cli.command()
-@click.option("-k", type=int, default=None, help="Number of unique items to keep (auto if not set)")
-@click.option("--local", is_flag=True, help="Use local MLX server (requires: jina-grep serve start)")
+@click.option(
+    "-k",
+    type=int,
+    default=None,
+    help="Number of unique items to keep (auto if not set)",
+)
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
 @click.option("--api-key", default=None, help="Jina API key")
 @click.pass_context
-def dedup(ctx, k, local, as_json, api_key):
+def dedup(ctx, k, as_json, api_key):
     """Deduplicate text lines from stdin.
 
     Uses embeddings to find semantically unique items.
@@ -381,23 +455,23 @@ def dedup(ctx, k, local, as_json, api_key):
     Examples:
         cat items.txt | jina dedup
         jina search "AI" | jina dedup -k 5
-        cat items.txt | jina dedup --local
     """
     key = api_key or ctx.obj.get("api_key")
+    timeout = ctx.obj.get("timeout")
     lines = utils.read_stdin_lines()
 
     if not lines:
-        click.echo("Error: no input on stdin.\n"
-                   "Fix: pipe text lines to deduplicate, one item per line.\n"
-                   "  cat items.txt | jina dedup\n"
-                   "  jina search \"AI\" | jina dedup -k 5", err=True)
+        click.echo(
+            "Error: no input on stdin.\n"
+            "Fix: pipe text lines to deduplicate, one item per line.\n"
+            "  cat items.txt | jina dedup\n"
+            '  jina search "AI" | jina dedup -k 5',
+            err=True,
+        )
         sys.exit(EXIT_USER_ERROR)
 
     try:
-        if local:
-            result = api.local_deduplicate(lines, k=k)
-        else:
-            result = api.deduplicate(lines, api_key=key, k=k)
+        result = api.deduplicate(lines, api_key=key, k=k, timeout=timeout)
         click.echo(utils.format_dedup_results(result, as_json=as_json))
     except Exception as e:
         utils.handle_http_error(e)
@@ -408,14 +482,21 @@ def dedup(ctx, k, local, as_json, api_key):
 
 @cli.command()
 @click.argument("text", nargs=-1)
-@click.option("--labels", required=True, multiple=True,
-              help="Labels for classification (comma-separated or repeated --labels)")
-@click.option("--model", default=None, help="Model name (default: jina-embeddings-v5-text-small, or v5-nano with --local)")
-@click.option("--local", is_flag=True, help="Use local MLX server (requires: jina-grep serve start)")
+@click.option(
+    "--labels",
+    required=True,
+    multiple=True,
+    help="Labels for classification (comma-separated or repeated --labels)",
+)
+@click.option(
+    "--model",
+    default=None,
+    help="Model name (default: jina-embeddings-v5-text-small)",
+)
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
 @click.option("--api-key", default=None, help="Jina API key")
 @click.pass_context
-def classify(ctx, text, labels, model, local, as_json, api_key):
+def classify(ctx, text, labels, model, as_json, api_key):
     """Classify text into labels.
 
     Input from arguments or stdin (one text per line).
@@ -425,9 +506,9 @@ def classify(ctx, text, labels, model, local, as_json, api_key):
         jina classify "this is great" --labels positive,negative
         echo "stock price rose" | jina classify --labels business,sports,tech
         jina classify "text1" "text2" --labels cat1 --labels cat2 --labels cat3
-        jina classify --local "this is great" --labels positive,negative
     """
     key = api_key or ctx.obj.get("api_key")
+    timeout = ctx.obj.get("timeout")
 
     texts = list(text)
     if not texts:
@@ -437,9 +518,11 @@ def classify(ctx, text, labels, model, local, as_json, api_key):
     if not texts:
         _short_usage(
             "Usage: jina classify TEXT --labels label1,label2",
-            ["jina classify \"this is great\" --labels positive,negative",
-             "echo \"text\" | jina classify --labels label1,label2",
-             "cat texts.txt | jina classify --labels a,b,c --json"],
+            [
+                'jina classify "this is great" --labels positive,negative',
+                'echo "text" | jina classify --labels label1,label2',
+                "cat texts.txt | jina classify --labels a,b,c --json",
+            ],
         )
 
     # Parse labels: support both --labels a,b,c and --labels a --labels b
@@ -448,17 +531,17 @@ def classify(ctx, text, labels, model, local, as_json, api_key):
         parsed_labels.extend(l.strip() for l in lbl.split(",") if l.strip())
 
     if not parsed_labels:
-        click.echo("Error: at least one label required.\n"
-                   "Fix: --labels positive,negative", err=True)
+        click.echo(
+            "Error: at least one label required.\nFix: --labels positive,negative",
+            err=True,
+        )
         sys.exit(EXIT_USER_ERROR)
 
     try:
-        if local:
-            _model = model or "jina-embeddings-v5-nano"
-            result = api.local_classify(texts, parsed_labels, model=_model)
-        else:
-            _model = model or "jina-embeddings-v5-text-small"
-            result = api.classify(texts, parsed_labels, api_key=key, model=_model)
+        _model = model or "jina-embeddings-v5-text-small"
+        result = api.classify(
+            texts, parsed_labels, api_key=key, model=_model, timeout=timeout
+        )
         click.echo(utils.format_classify_results(result, as_json=as_json))
     except Exception as e:
         utils.handle_http_error(e)
@@ -484,6 +567,7 @@ def screenshot(ctx, url, full_page, output, as_json, api_key):
         echo "https://example.com" | jina screenshot
     """
     key = api_key or ctx.obj.get("api_key")
+    timeout = ctx.obj.get("timeout")
 
     if not url:
         stdin_lines = utils.read_stdin_lines()
@@ -493,14 +577,18 @@ def screenshot(ctx, url, full_page, output, as_json, api_key):
     if not url:
         _short_usage(
             "Usage: jina screenshot URL",
-            ["jina screenshot https://example.com",
-             "jina screenshot URL --full-page -o page.jpg"],
+            [
+                "jina screenshot https://example.com",
+                "jina screenshot URL --full-page -o page.jpg",
+            ],
         )
 
     _validate_url(url)
 
     try:
-        result = api.screenshot_url(url, api_key=key, full_page=full_page)
+        result = api.screenshot_url(
+            url, api_key=key, full_page=full_page, timeout=timeout
+        )
         data = result.get("data", result)
 
         if as_json:
@@ -525,16 +613,19 @@ def screenshot(ctx, url, full_page, output, as_json, api_key):
             if output:
                 # Save to file
                 import base64
+
                 if img_url:
                     # Download from URL
-                    with api._client() as client:
+                    with api._client(timeout=timeout or api.DEFAULT_TIMEOUT) as client:
                         resp = client.get(img_url)
                         resp.raise_for_status()
                         with open(output, "wb") as f:
                             f.write(resp.content)
                 elif img_b64:
                     if img_b64.startswith("data:"):
-                        img_b64 = img_b64.split(",", 1)[1] if "," in img_b64 else img_b64
+                        img_b64 = (
+                            img_b64.split(",", 1)[1] if "," in img_b64 else img_b64
+                        )
                     with open(output, "wb") as f:
                         f.write(base64.b64decode(img_b64))
                 click.echo(f"Saved to {output}", err=True)
@@ -561,7 +652,9 @@ def screenshot(ctx, url, full_page, output, as_json, api_key):
 @click.argument("query", required=False)
 @click.option("--author", default=None, help="Filter by author name")
 @click.option("--year", type=int, default=None, help="Filter by year (minimum)")
-@click.option("-n", "--num", default=10, type=int, help="Number of results (default: 10)")
+@click.option(
+    "-n", "--num", default=10, type=int, help="Number of results (default: 10)"
+)
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
 @click.option("--api-key", default=None, help="Jina API key")
 @click.pass_context
@@ -583,13 +676,18 @@ def bibtex(ctx, query, author, year, num, as_json, api_key):
     if not query:
         _short_usage(
             "Usage: jina bibtex QUERY",
-            ["jina bibtex \"attention is all you need\"",
-             "jina bibtex \"transformer\" --author Vaswani --year 2017"],
+            [
+                'jina bibtex "attention is all you need"',
+                'jina bibtex "transformer" --author Vaswani --year 2017',
+            ],
         )
     key = api_key or ctx.obj.get("api_key")
+    timeout = ctx.obj.get("timeout")
 
     try:
-        results = api.search_bibtex(query, api_key=key, author=author, year=year, num=num)
+        results = api.search_bibtex(
+            query, api_key=key, author=author, year=year, num=num, timeout=timeout
+        )
         click.echo(utils.format_bibtex_results(results, as_json=as_json))
     except Exception as e:
         utils.handle_http_error(e)
@@ -619,13 +717,13 @@ def expand(ctx, query, as_json, api_key):
     if not query:
         _short_usage(
             "Usage: jina expand QUERY",
-            ["jina expand \"machine learning\"",
-             "echo \"query\" | jina expand"],
+            ['jina expand "machine learning"', 'echo "query" | jina expand'],
         )
     key = api_key or ctx.obj.get("api_key")
+    timeout = ctx.obj.get("timeout")
 
     try:
-        results = api.expand_query(query, api_key=key)
+        results = api.expand_query(query, api_key=key, timeout=timeout)
         if as_json:
             click.echo(json.dumps(results, indent=2, ensure_ascii=False))
         else:
@@ -649,9 +747,18 @@ def expand(ctx, query, as_json, api_key):
 @cli.command()
 @click.argument("url_or_id", required=False)
 @click.option("--arxiv-id", default=None, help="arXiv paper ID (e.g. 2301.12345)")
-@click.option("--type", "extract_type", default=None,
-              help="Filter by type: figure, table, equation (comma-separated)")
-@click.option("--max-edge", type=int, default=1024, help="Max pixel size for images (default: 1024)")
+@click.option(
+    "--type",
+    "extract_type",
+    default=None,
+    help="Filter by type: figure, table, equation (comma-separated)",
+)
+@click.option(
+    "--max-edge",
+    type=int,
+    default=1024,
+    help="Max pixel size for images (default: 1024)",
+)
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
 @click.option("--api-key", default=None, help="Jina API key")
 @click.pass_context
@@ -665,6 +772,7 @@ def pdf(ctx, url_or_id, arxiv_id, extract_type, max_edge, as_json, api_key):
         jina pdf https://example.com/paper.pdf --type figure,table
     """
     key = api_key or ctx.obj.get("api_key")
+    timeout = ctx.obj.get("timeout")
 
     url = None
     if url_or_id:
@@ -686,15 +794,21 @@ def pdf(ctx, url_or_id, arxiv_id, extract_type, max_edge, as_json, api_key):
     if not url and not arxiv_id:
         _short_usage(
             "Usage: jina pdf URL_OR_ARXIV_ID",
-            ["jina pdf https://arxiv.org/pdf/2301.12345",
-             "jina pdf 2301.12345",
-             "jina pdf paper.pdf --type figure,table"],
+            [
+                "jina pdf https://arxiv.org/pdf/2301.12345",
+                "jina pdf 2301.12345",
+                "jina pdf paper.pdf --type figure,table",
+            ],
         )
 
     try:
         result = api.extract_pdf(
-            url=url, arxiv_id=arxiv_id, api_key=key,
-            max_edge=max_edge, extract_type=extract_type,
+            url=url,
+            arxiv_id=arxiv_id,
+            api_key=key,
+            max_edge=max_edge,
+            extract_type=extract_type,
+            timeout=timeout,
         )
         click.echo(utils.format_pdf_results(result, as_json=as_json))
     except Exception as e:
@@ -724,14 +838,14 @@ def datetime_cmd(ctx, url, as_json):
     if not url:
         _short_usage(
             "Usage: jina datetime URL",
-            ["jina datetime https://example.com/article",
-             "echo URL | jina datetime"],
+            ["jina datetime https://example.com/article", "echo URL | jina datetime"],
         )
 
     _validate_url(url)
+    timeout = ctx.obj.get("timeout")
 
     try:
-        result = api.guess_datetime(url)
+        result = api.guess_datetime(url, timeout=timeout)
         if as_json:
             click.echo(json.dumps(result, indent=2, ensure_ascii=False))
         else:
@@ -762,8 +876,9 @@ def primer(ctx, as_json):
         jina primer
         jina primer --json
     """
+    timeout = ctx.obj.get("timeout")
     try:
-        result = api.primer()
+        result = api.primer(timeout=timeout)
         if as_json:
             click.echo(json.dumps(result, indent=2, ensure_ascii=False))
         else:
@@ -780,65 +895,6 @@ def primer(ctx, as_json):
                 click.echo(str(data))
     except Exception as e:
         utils.handle_http_error(e)
-
-
-# -- grep --
-
-
-@cli.command(
-    context_settings=dict(
-        ignore_unknown_options=True,
-        allow_extra_args=True,
-    ),
-)
-@click.argument("args", nargs=-1, type=click.UNPROCESSED)
-@click.pass_context
-def grep(ctx, args):
-    """Semantic grep using local Jina embeddings (requires jina-grep).
-
-    Searches files semantically using natural language queries.
-    Supports most GNU grep flags plus --threshold, --top-k, --model.
-
-    \b
-    Examples:
-        jina grep "error handling" src/
-        jina grep -r --threshold 0.3 "database connection" .
-        grep -rn "error" src/ | jina grep "error handling logic"
-        jina grep serve start
-
-    \b
-    Install: pip install jina-grep
-    """
-    if not args:
-        _short_usage(
-            "Usage: jina grep PATTERN [FILES...] [OPTIONS]",
-            ['jina grep "error handling" src/',
-             'jina grep -r "database connection" .',
-             'grep -rn "error" src/ | jina grep "retry logic"',
-             'jina grep serve start    (start local embedding server)'],
-        )
-
-    try:
-        from jina_grep.cli import main as grep_main
-    except ImportError:
-        click.echo(
-            "Error: jina-grep not installed.\n"
-            "Fix: pip install jina-grep",
-            err=True,
-        )
-        sys.exit(EXIT_USER_ERROR)
-
-    # Replace sys.argv so jina-grep's CLI sees the right args
-    import sys as _sys
-    original_argv = _sys.argv
-    _sys.argv = ["jina-grep"] + list(args)
-    try:
-        grep_main()
-    except SystemExit as e:
-        _sys.argv = original_argv
-        sys.exit(e.code if e.code is not None else 0)
-    finally:
-        _sys.argv = original_argv
 
 
 if __name__ == "__main__":

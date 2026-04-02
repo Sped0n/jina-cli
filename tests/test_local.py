@@ -1,72 +1,110 @@
-"""Unit tests for local mode functions (no API key or server needed)."""
+"""Unit tests for retry and timeout behavior in jina_cli.api."""
 
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
-from jina_cli.api import local_classify, _cosine_similarity
+import httpx
 
-
-class TestCosineSimlarity:
-    def test_identical_vectors(self):
-        assert abs(_cosine_similarity([1, 0, 0], [1, 0, 0]) - 1.0) < 1e-6
-
-    def test_orthogonal_vectors(self):
-        assert abs(_cosine_similarity([1, 0], [0, 1])) < 1e-6
-
-    def test_zero_vector(self):
-        assert _cosine_similarity([0, 0], [1, 1]) == 0.0
+from jina_cli import api
 
 
-class TestLocalClassify:
-    def test_single_text(self):
-        fake_embeddings = [
-            {"embedding": [0.9, 0.1, 0.0]},   # "I love this" - text
-            {"embedding": [0.8, 0.2, 0.0]},   # "positive" - label (close)
-            {"embedding": [0.0, 0.1, 0.9]},   # "negative" - label (far)
+def make_response(
+    status_code: int, url: str, headers: dict | None = None
+) -> httpx.Response:
+    request = httpx.Request("GET", url)
+    return httpx.Response(status_code, headers=headers, request=request)
+
+
+class TestRequestRetry:
+    def test_retry_on_429(self):
+        client = Mock()
+        client.get.side_effect = [
+            make_response(429, f"{api.READER_BASE}/", {"Retry-After": "0.25"}),
+            make_response(200, f"{api.READER_BASE}/"),
         ]
 
-        with patch("jina_cli.api.local_embed", return_value=fake_embeddings):
-            result = local_classify(
-                texts=["I love this"],
-                labels=["positive", "negative"],
-            )
+        with patch("jina_cli.api.time.sleep") as sleep:
+            resp = api._request_with_retry("GET", f"{api.READER_BASE}/", client)
 
-        assert len(result) == 1
-        assert result[0]["prediction"] == "positive"
-        assert result[0]["score"] > 0.5
-        assert result[0]["index"] == 0
+        assert resp.status_code == 200
+        assert client.get.call_count == 2
+        sleep.assert_called_once_with(0.5)
 
-    def test_multiple_texts(self):
-        fake_embeddings = [
-            {"embedding": [0.9, 0.1]},   # text 1 - closer to label 1
-            {"embedding": [0.1, 0.9]},   # text 2 - closer to label 2
-            {"embedding": [0.8, 0.2]},   # label "sports"
-            {"embedding": [0.2, 0.8]},   # label "politics"
+    def test_retry_on_jina_5xx(self):
+        client = Mock()
+        client.post.side_effect = [
+            make_response(503, f"{api.API_BASE}/v1/embeddings"),
+            make_response(200, f"{api.API_BASE}/v1/embeddings"),
         ]
 
-        with patch("jina_cli.api.local_embed", return_value=fake_embeddings):
-            result = local_classify(
-                texts=["goal scored", "election results"],
-                labels=["sports", "politics"],
+        with patch("jina_cli.api.time.sleep") as sleep:
+            resp = api._request_with_retry(
+                "POST", f"{api.API_BASE}/v1/embeddings", client
             )
 
-        assert len(result) == 2
-        assert result[0]["prediction"] == "sports"
-        assert result[1]["prediction"] == "politics"
+        assert resp.status_code == 200
+        assert client.post.call_count == 2
+        sleep.assert_called_once_with(0.5)
 
-    def test_result_format(self):
-        """Results should have index, prediction, score keys."""
-        fake_embeddings = [
-            {"embedding": [1.0, 0.0]},
-            {"embedding": [0.9, 0.1]},
+    def test_no_retry_on_client_error(self):
+        client = Mock()
+        client.get.return_value = make_response(404, f"{api.READER_BASE}/")
+
+        with patch("jina_cli.api.time.sleep") as sleep:
+            try:
+                api._request_with_retry("GET", f"{api.READER_BASE}/", client)
+            except httpx.HTTPStatusError as exc:
+                assert exc.response.status_code == 404
+            else:
+                assert False, "expected HTTPStatusError"
+
+        assert client.get.call_count == 1
+        sleep.assert_not_called()
+
+    def test_no_retry_on_non_jina_5xx(self):
+        client = Mock()
+        client.get.return_value = make_response(503, "https://example.com")
+
+        with patch("jina_cli.api.time.sleep") as sleep:
+            try:
+                api._request_with_retry("GET", "https://example.com", client)
+            except httpx.HTTPStatusError as exc:
+                assert exc.response.status_code == 503
+            else:
+                assert False, "expected HTTPStatusError"
+
+        assert client.get.call_count == 1
+        sleep.assert_not_called()
+
+    def test_retry_on_timeout_exception(self):
+        client = Mock()
+        client.get.side_effect = [
+            httpx.TimeoutException("timed out"),
+            make_response(200, f"{api.READER_BASE}/"),
         ]
 
-        with patch("jina_cli.api.local_embed", return_value=fake_embeddings):
-            result = local_classify(
-                texts=["test"],
-                labels=["label1"],
-            )
+        with patch("jina_cli.api.time.sleep") as sleep:
+            resp = api._request_with_retry("GET", f"{api.READER_BASE}/", client)
 
-        assert "index" in result[0]
-        assert "prediction" in result[0]
-        assert "score" in result[0]
-        assert result[0]["prediction"] == "label1"
+        assert resp.status_code == 200
+        assert client.get.call_count == 2
+        sleep.assert_called_once_with(0.5)
+
+    def test_retry_after_is_capped(self):
+        client = Mock()
+        client.get.side_effect = [
+            make_response(429, f"{api.READER_BASE}/", {"Retry-After": "45"}),
+            make_response(200, f"{api.READER_BASE}/"),
+        ]
+
+        with patch("jina_cli.api.time.sleep") as sleep:
+            api._request_with_retry("GET", f"{api.READER_BASE}/", client)
+
+        sleep.assert_called_once_with(30.0)
+
+
+class TestTimeoutHelpers:
+    def test_effective_timeout_uses_default(self):
+        assert api._effective_timeout(None) == api.DEFAULT_TIMEOUT
+
+    def test_effective_timeout_prefers_override(self):
+        assert api._effective_timeout(12.5) == 12.5

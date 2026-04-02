@@ -109,7 +109,9 @@ class TestEmbed:
 
 class TestRerank:
     def test_rerank_basic(self):
-        r = run_jina("rerank", "pet animal", stdin="cat is cute\ndog is loyal\nfish can swim\n")
+        r = run_jina(
+            "rerank", "pet animal", stdin="cat is cute\ndog is loyal\nfish can swim\n"
+        )
         assert r.returncode == 0
         # Should have score format [x.xxxx]
         assert "[" in r.stdout and "]" in r.stdout
@@ -202,11 +204,31 @@ class TestHelp:
         assert r.returncode == 0
         assert "--json" in r.stdout or "--json" in r.stderr
 
+    def test_global_timeout_help_flag(self):
+        r = run_jina("--help")
+        assert r.returncode == 0
+        assert "--timeout" in r.stdout or "--timeout" in r.stderr
+
     def test_typo_suggestion(self):
         """Typo should suggest correct command."""
         r = run_jina("rea")
         assert r.returncode != 0
         assert "read" in r.stderr.lower() or "rerank" in r.stderr.lower()
+
+    def test_grep_removed(self):
+        r = run_jina("grep", "test")
+        assert r.returncode != 0
+        assert "unknown command" in r.stderr.lower()
+
+
+class TestGlobalTimeout:
+    def test_timeout_before_subcommand_search(self):
+        r = run_jina("--timeout", "45", "search", "jina ai", "-n", "1")
+        assert r.returncode == 0
+
+    def test_timeout_before_subcommand_read(self):
+        r = run_jina("--timeout", "60", "read", "https://example.com")
+        assert r.returncode == 0
 
 
 class TestVersion:
@@ -274,14 +296,25 @@ class TestClassify:
         assert "(" in r.stdout  # score in parens
 
     def test_classify_json(self):
-        r = run_jina("classify", "stock market crash", "--labels", "business,sports,tech", "--json")
+        r = run_jina(
+            "classify",
+            "stock market crash",
+            "--labels",
+            "business,sports,tech",
+            "--json",
+        )
         assert r.returncode == 0
         data = json.loads(r.stdout)
         assert isinstance(data, list)
         assert len(data) > 0
 
     def test_classify_stdin(self):
-        r = run_jina("classify", "--labels", "positive,negative", stdin="I love this\nI hate this\n")
+        r = run_jina(
+            "classify",
+            "--labels",
+            "positive,negative",
+            stdin="I love this\nI hate this\n",
+        )
         assert r.returncode == 0
         lines = [l for l in r.stdout.strip().split("\n") if l]
         assert len(lines) == 2
@@ -311,14 +344,19 @@ class TestPipe:
 
     def test_multiline_dedup_pipe(self):
         """echo -e "a\\nb" | jina dedup should work."""
-        r = run_jina("dedup", stdin="machine learning\nmachine learning algorithms\nquantum physics\n")
+        r = run_jina(
+            "dedup",
+            stdin="machine learning\nmachine learning algorithms\nquantum physics\n",
+        )
         assert r.returncode == 0
         lines = [l for l in r.stdout.strip().split("\n") if l]
         assert len(lines) >= 1
 
     def test_echo_classify_pipe(self):
         """echo text | jina classify --labels should work."""
-        r = run_jina("classify", "--labels", "positive,negative", stdin="this is great\n")
+        r = run_jina(
+            "classify", "--labels", "positive,negative", stdin="this is great\n"
+        )
         assert r.returncode == 0
         assert "(" in r.stdout
 

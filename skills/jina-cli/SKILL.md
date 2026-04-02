@@ -12,7 +12,6 @@ Concise guidance for using the `jina` CLI as a shell-first interface to Jina API
 - Use when the task fits `jina` subcommands better than a custom tool flow.
 - Prefer `jina` for shell-native search, URL reading, embeddings, reranking, classification, deduplication, and related utilities.
 - Reach for the CLI when composability with pipes, `jq`, and existing shell tools matters.
-- Do not use `--local`; prefer the normal remote API-backed CLI flow.
 
 ## Decision Order
 
@@ -28,7 +27,7 @@ Concise guidance for using the `jina` CLI as a shell-first interface to Jina API
 3. Prefer `jina search` for discovery, then `jina read` for extracting the chosen sources.
 4. Add `--json` when the result will be consumed by another tool.
 5. Keep `stderr` visible; it carries actionable failure details.
-6. Do not use `--local` or `jina grep` unless the user explicitly asks for them.
+6. Use the standard CLI surface as documented here; avoid assuming extra subcommands beyond the documented set.
 
 ## Topics
 
