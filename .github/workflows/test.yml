@@ -26,4 +26,7 @@ jobs:
       - name: Run tests
         env:
           JINA_API_KEY: ${{ secrets.JINA_API_KEY }}
-        run: uv run pytest
+        run: |
+          set -euo pipefail
+          : "${JINA_API_KEY:?Repository secret JINA_API_KEY is required}"
+          uv run pytest -v --tb=short
