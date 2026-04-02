@@ -19,8 +19,7 @@ DEFAULT_TIMEOUT = 30.0
 USER_AGENT = f"jina-cli/{__version__}"
 
 # Retry config for transient errors (429, Jina 5xx, timeouts, connection errors)
-MAX_RETRIES = 4
-RETRY_BACKOFF = [1.0, 2.0, 4.0, 8.0]  # seconds between retries
+RETRY_BACKOFF = [1.0, 2.0, 4.0, 8.0, 12.0, 16.0]  # seconds between retries
 MAX_RETRY_AFTER_WAIT = (
     30.0  # Cap server-directed Retry-After sleeps for CLI responsiveness.
 )
@@ -118,7 +117,7 @@ def _request_with_retry(
     kwargs["headers"] = headers
 
     last_exc = None
-    for attempt in range(MAX_RETRIES):
+    for attempt in range(len(RETRY_BACKOFF)):
         try:
             if method == "GET":
                 resp = client.get(url, **kwargs)
@@ -127,7 +126,7 @@ def _request_with_retry(
 
             if (
                 not _should_retry_status(resp.status_code, url)
-                or attempt == MAX_RETRIES - 1
+                or attempt == len(RETRY_BACKOFF) - 1
             ):
                 resp.raise_for_status()
                 return resp
@@ -140,7 +139,7 @@ def _request_with_retry(
 
         except (httpx.TimeoutException, httpx.ConnectError) as exc:
             last_exc = exc
-            if attempt == MAX_RETRIES - 1:
+            if attempt == len(RETRY_BACKOFF) - 1:
                 raise
             time.sleep(_retry_wait(attempt))
 

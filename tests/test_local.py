@@ -46,6 +46,24 @@ class TestRequestRetry:
         assert client.post.call_count == 2
         sleep.assert_called_once_with(1.0)
 
+    def test_exhausted_retries_use_general_backoff(self):
+        client = Mock()
+        client.get.side_effect = [
+            make_response(503, f"{api.READER_BASE}/")
+            for _ in range(len(api.RETRY_BACKOFF))
+        ]
+
+        with patch("jina_cli.api.time.sleep") as sleep:
+            try:
+                api._request_with_retry("GET", f"{api.READER_BASE}/", client)
+            except httpx.HTTPStatusError as exc:
+                assert exc.response.status_code == 503
+            else:
+                assert False, "expected HTTPStatusError"
+
+        assert client.get.call_count == len(api.RETRY_BACKOFF)
+        assert sleep.call_args_list == [((wait,),) for wait in api.RETRY_BACKOFF[:-1]]
+
     def test_no_retry_on_client_error(self):
         client = Mock()
         client.get.return_value = make_response(404, f"{api.READER_BASE}/")
@@ -154,29 +172,27 @@ class TestRequestRetry:
 
         sleep.assert_called_once_with(1.0)
 
-    def test_exhausted_retries_uses_extended_window(self):
+    def test_exhausted_retries_on_502_use_general_backoff(self):
         client = Mock()
         client.get.side_effect = [
-            make_response(503, f"{api.READER_BASE}/"),
-            make_response(503, f"{api.READER_BASE}/"),
-            make_response(503, f"{api.READER_BASE}/"),
-            make_response(503, f"{api.READER_BASE}/"),
+            make_response(502, f"{api.READER_BASE}/"),
+            make_response(502, f"{api.READER_BASE}/"),
+            make_response(502, f"{api.READER_BASE}/"),
+            make_response(502, f"{api.READER_BASE}/"),
+            make_response(502, f"{api.READER_BASE}/"),
+            make_response(502, f"{api.READER_BASE}/"),
         ]
 
         with patch("jina_cli.api.time.sleep") as sleep:
             try:
                 api._request_with_retry("GET", f"{api.READER_BASE}/", client)
             except httpx.HTTPStatusError as exc:
-                assert exc.response.status_code == 503
+                assert exc.response.status_code == 502
             else:
                 assert False, "expected HTTPStatusError"
 
-        assert client.get.call_count == 4
-        assert sleep.call_args_list == [
-            ((1.0,),),
-            ((2.0,),),
-            ((4.0,),),
-        ]
+        assert client.get.call_count == len(api.RETRY_BACKOFF)
+        assert sleep.call_args_list == [((wait,),) for wait in api.RETRY_BACKOFF[:-1]]
 
 
 class TestTimeoutHelpers:
