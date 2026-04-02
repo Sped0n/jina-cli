@@ -3,6 +3,8 @@
 import os
 import sys
 import time
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from urllib.parse import urlparse
 
 import httpx
@@ -17,9 +19,11 @@ DEFAULT_TIMEOUT = 30.0
 USER_AGENT = f"jina-cli/{__version__}"
 
 # Retry config for transient errors (429, Jina 5xx, timeouts, connection errors)
-MAX_RETRIES = 3
-RETRY_BACKOFF = [0.5, 1.0, 2.0]  # seconds between retries
-MAX_RETRY_WAIT = 30.0
+MAX_RETRIES = 4
+RETRY_BACKOFF = [1.0, 2.0, 4.0, 8.0]  # seconds between retries
+MAX_RETRY_AFTER_WAIT = (
+    30.0  # Cap server-directed Retry-After sleeps for CLI responsiveness.
+)
 
 _RETRYABLE_STATUS = {429, 500, 502, 503, 504}
 _JINA_RETRY_HOSTS = {
@@ -82,8 +86,20 @@ def _retry_wait(attempt: int, retry_after: str | None = None) -> float:
         try:
             wait = max(wait, float(retry_after))
         except ValueError:
-            pass
-    return min(wait, MAX_RETRY_WAIT)
+            try:
+                retry_at = parsedate_to_datetime(retry_after)
+                if retry_at.tzinfo is None:
+                    retry_at = retry_at.replace(tzinfo=timezone.utc)
+                wait = max(
+                    wait,
+                    max(
+                        0.0,
+                        (retry_at - datetime.now(timezone.utc)).total_seconds(),
+                    ),
+                )
+            except (TypeError, ValueError, OverflowError):
+                pass
+    return min(wait, MAX_RETRY_AFTER_WAIT)
 
 
 def _request_with_retry(
