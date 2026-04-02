@@ -1,10 +1,10 @@
 # jina-cli
 
-[MCP version](https://github.com/jina-ai/MCP)
+A small personal CLI for the Jina APIs I use most often.
 
-All Jina AI APIs as Unix commands. Search, read, embed, rerank - with pipes.
+This repo is intentionally narrow: a shell-first tool for `read`, `search`, embeddings, reranking, classification, deduplication, screenshots, BibTeX lookup, PDF extraction, and related utilities.
 
-This CLI is designed for both humans and AI agents. An agent with shell access needs only `run(command="jina search ...")` instead of managing 20 separate tool definitions. The CLI supports pipes, chaining (`&&`, `||`, `;`), and `--help` for self-discovery.
+The interface is optimized for direct terminal use and simple automation. Commands are pipe-friendly, support `--help` for discovery, and now share a global `--timeout` flag for slow requests.
 
 ## Install
 
@@ -37,6 +37,10 @@ export JINA_API_KEY=your-key-here
 | `jina datetime URL` | Guess publish/update date of a URL |
 | `jina primer` | Context info (time, location, network) |
 
+## Global options
+
+- `--timeout FLOAT` overrides the default HTTP timeout for all network-backed commands.
+
 ## Pipes
 
 The point of a CLI is composability. Every command reads from stdin and writes to stdout.
@@ -56,6 +60,9 @@ jina expand "climate change" | head -1 | xargs -I {} jina search "{}"
 
 # Get BibTeX for arXiv results
 jina search --arxiv "BERT" --json | jq -r '.results[].title' | head -3
+
+# Allow a longer request window for a slow page
+jina --timeout 60 read https://example.com/large-page
 ```
 
 ## Usage
@@ -143,6 +150,18 @@ jina search "BERT" --json | jq '.results[0].url'
 jina read https://example.com --json | jq '.data.content'
 ```
 
+## Retry behavior
+
+Network-backed requests retry only on transient failures:
+
+- network timeouts and connection errors
+- `429` rate limits
+- `5xx` responses returned by Jina endpoints
+
+They do not retry normal client-side `4xx` errors or failures from non-Jina targets.
+
+Backoff is exponential: `0.5s -> 1s -> 2s`, capped at `30s`.
+
 ## Exit codes
 
 | Code | Meaning |
@@ -164,9 +183,9 @@ jina search "query" && echo "success" || echo "failed with $?"
 |----------|-------------|
 | `JINA_API_KEY` | API key for Jina services (required for most commands) |
 
-## For AI agents
+## Automation
 
-An agent with shell access can use this CLI directly:
+Shell automation can call the CLI directly:
 
 ```python
 result = run(command="jina search 'transformer architecture'")
@@ -174,7 +193,7 @@ result = run(command="jina read https://arxiv.org/abs/2301.12345")
 result = run(command="jina search 'AI' | jina rerank 'embeddings'")
 ```
 
-No tool catalog needed. The agent discovers capabilities via `jina --help` and `jina search --help`. Errors include actionable guidance.
+The CLI surface is intentionally small enough to discover from `jina --help` and per-command help.
 
 ## Design principles
 
