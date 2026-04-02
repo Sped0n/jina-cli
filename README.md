@@ -1,20 +1,24 @@
 # jina-cli
 
-A small personal CLI for the Jina APIs I use most often.
+> [!NOTE]
+> Modified version of https://github.com/jina-ai/cli.
 
-This repo is intentionally narrow: a shell-first tool for `read`, `search`, embeddings, reranking, classification, deduplication, screenshots, BibTeX lookup, PDF extraction, and related utilities.
+All Jina AI APIs as Unix commands. Search, read, embed, rerank - with pipes.
 
-The interface is optimized for direct terminal use and simple automation. Commands are pipe-friendly, support `--help` for discovery, and now share a global `--timeout` flag for slow requests.
+This CLI is designed for both humans and AI agents. An agent with shell access needs only run(command="jina search ...") instead of managing 20 separate tool definitions. The CLI supports pipes, chaining (&&, ||, ;), and --help for self-discovery
 
 ## Install
 
 ```bash
-pip install jina-cli
+git clone https://github.com/jina-ai/jina-cli.git
+cd jina-cli
+pip install .
 # or
-uv pip install jina-cli
+uv pip install .
 ```
 
 Set your API key:
+
 ```bash
 export JINA_API_KEY=your-key-here
 # Get one at https://jina.ai/?sui=apikey
@@ -22,20 +26,20 @@ export JINA_API_KEY=your-key-here
 
 ## Commands
 
-| Command | Description |
-|---------|-------------|
-| `jina read URL` | Extract clean markdown from web pages |
-| `jina search QUERY` | Web search (also --arxiv, --ssrn, --images, --blog) |
-| `jina embed TEXT` | Generate embeddings |
-| `jina rerank QUERY` | Rerank documents from stdin by relevance |
-| `jina classify TEXT` | Classify text into labels |
-| `jina dedup` | Deduplicate text from stdin |
-| `jina screenshot URL` | Capture screenshot of a URL |
-| `jina bibtex QUERY` | Search BibTeX citations (DBLP + Semantic Scholar) |
-| `jina expand QUERY` | Expand a query into related queries |
-| `jina pdf URL` | Extract figures/tables/equations from PDFs |
-| `jina datetime URL` | Guess publish/update date of a URL |
-| `jina primer` | Context info (time, location, network) |
+| Command               | Description                                         |
+| --------------------- | --------------------------------------------------- |
+| `jina read URL`       | Extract clean markdown from web pages               |
+| `jina search QUERY`   | Web search (also --arxiv, --ssrn, --images, --blog) |
+| `jina embed TEXT`     | Generate embeddings                                 |
+| `jina rerank QUERY`   | Rerank documents from stdin by relevance            |
+| `jina classify TEXT`  | Classify text into labels                           |
+| `jina dedup`          | Deduplicate text from stdin                         |
+| `jina screenshot URL` | Capture screenshot of a URL                         |
+| `jina bibtex QUERY`   | Search BibTeX citations (DBLP + Semantic Scholar)   |
+| `jina expand QUERY`   | Expand a query into related queries                 |
+| `jina pdf URL`        | Extract figures/tables/equations from PDFs          |
+| `jina datetime URL`   | Guess publish/update date of a URL                  |
+| `jina primer`         | Context info (time, location, network)              |
 
 ## Global options
 
@@ -164,12 +168,12 @@ Backoff is exponential: `0.5s -> 1s -> 2s`, capped at `30s`.
 
 ## Exit codes
 
-| Code | Meaning |
-|------|---------|
-| 0 | Success |
-| 1 | User/input error (missing args, bad input, missing API key) |
-| 2 | API/server error (network, timeout, server error) |
-| 130 | Interrupted (Ctrl+C) |
+| Code | Meaning                                                     |
+| ---- | ----------------------------------------------------------- |
+| 0    | Success                                                     |
+| 1    | User/input error (missing args, bad input, missing API key) |
+| 2    | API/server error (network, timeout, server error)           |
+| 130  | Interrupted (Ctrl+C)                                        |
 
 Useful for scripting and agent workflows:
 
@@ -179,8 +183,8 @@ jina search "query" && echo "success" || echo "failed with $?"
 
 ## Environment variables
 
-| Variable | Description |
-|----------|-------------|
+| Variable       | Description                                            |
+| -------------- | ------------------------------------------------------ |
 | `JINA_API_KEY` | API key for Jina services (required for most commands) |
 
 ## Automation
