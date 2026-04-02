@@ -4,6 +4,17 @@ on:
   push:
     branches:
       - main
+    paths:
+      - "**/*.py"
+      - "uv.lock"
+      - "pyproject.toml"
+      - ".github/workflows/test.yml"
+  pull_request:
+    paths:
+      - "**/*.py"
+      - "uv.lock"
+      - "pyproject.toml"
+      - ".github/workflows/test.yml"
   workflow_dispatch:
 
 jobs:
