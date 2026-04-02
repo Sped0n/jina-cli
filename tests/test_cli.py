@@ -42,11 +42,6 @@ def skip_if_transient_api_failure(result: subprocess.CompletedProcess) -> None:
         pytest.skip("Jina search API temporarily unavailable (HTTP 503)")
 
 
-def skip_if_missing_api_key(result: subprocess.CompletedProcess) -> None:
-    if result.returncode == 1 and "JINA_API_KEY" in result.stderr:
-        pytest.skip("JINA_API_KEY not available for live integration test")
-
-
 def assert_ok_or_skip_503(result: subprocess.CompletedProcess) -> None:
     skip_if_transient_api_failure(result)
     assert result.returncode == 0
