@@ -31,12 +31,12 @@ Concise guidance for using the `jina` CLI as a shell-first interface to Jina API
 
 ## Topics
 
-| Topic                 | Guidance                                                  | Reference                                                            |
-| --------------------- | --------------------------------------------------------- | -------------------------------------------------------------------- |
-| Basics                | Auth, help flow, stdin, stdout, and `--json` defaults     | [references/basics.md](references/basics.md)                         |
-| Search and Read       | Web search, URL extraction, PDFs, and related lookups     | [references/search-read.md](references/search-read.md)               |
-| Vectors and Ranking   | Embeddings, reranking, classification, and deduplication  | [references/vectors-ranking.md](references/vectors-ranking.md)       |
-| Pipes and Scripting   | Chaining commands, `jq`, exit codes, and shell workflows  | [references/pipes-scripting.md](references/pipes-scripting.md)       |
+| Topic               | Guidance                                                 | Reference                                                      |
+| ------------------- | -------------------------------------------------------- | -------------------------------------------------------------- |
+| Basics              | Auth, help flow, stdin, stdout, and `--json` defaults    | [references/basics.md](references/basics.md)                   |
+| Search and Read     | Web search, URL extraction, PDFs, and related lookups    | [references/search-read.md](references/search-read.md)         |
+| Vectors and Ranking | Embeddings, reranking, classification, and deduplication | [references/vectors-ranking.md](references/vectors-ranking.md) |
+| Pipes and Scripting | Chaining commands, `jq`, exit codes, and shell workflows | [references/pipes-scripting.md](references/pipes-scripting.md) |
 
 ## References
 

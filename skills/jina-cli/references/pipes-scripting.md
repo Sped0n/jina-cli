@@ -1,8 +1,3 @@
----
-urls:
-  - https://github.com/jina-ai/cli#readme
----
-
 # Pipes and Scripting
 
 ## Goals

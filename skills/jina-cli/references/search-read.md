@@ -1,8 +1,3 @@
----
-urls:
-  - https://github.com/jina-ai/cli#readme
----
-
 # Search and Read
 
 ## Goals
@@ -36,21 +31,22 @@ jina search --arxiv "attention mechanism" -n 10
 
 Read a page as markdown:
 
-```bash
+````bash
 jina read https://example.com
 
 Use a longer timeout for a slow or large page:
 
 ```bash
 jina --timeout 60 read https://example.com/large.pdf
-```
-```
+````
+
+````
 
 Read multiple URLs from stdin:
 
 ```bash
 cat urls.txt | jina read
-```
+````
 
 Extract from a PDF:
 

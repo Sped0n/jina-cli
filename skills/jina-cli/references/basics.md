@@ -1,9 +1,3 @@
----
-urls:
-  - https://github.com/jina-ai/cli#readme
-  - https://pypi.org/project/jina-cli/
----
-
 # Basics
 
 ## Goals
@@ -50,12 +44,15 @@ printf '%s\n' "https://example.com" | jina read
 
 Structured output for downstream parsing:
 
-```bash
+````bash
 jina search "BERT" --json | jq '.results[0].url'
 
 Override the default timeout globally:
 
 ```bash
 jina --timeout 45 search "complex query"
+````
+
 ```
+
 ```
