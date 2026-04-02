@@ -1,26 +1,27 @@
 name: Tests
 
 on:
-  pull_request:
-    branches: [main]
+  push:
+    branches:
+      - main
+  workflow_dispatch:
 
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-python@v5
+      - name: Set up Python
+        uses: https://github.com/actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.13"
 
       - name: Install uv
-        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+        uses: astral-sh/setup-uv@v7
 
-      - name: Install dependencies
-        run: |
-          uv venv
-          uv pip install -e ".[test]"
+      - name: Install the project
+        run: uv sync --locked --dev
 
       - name: Run tests
         env:
