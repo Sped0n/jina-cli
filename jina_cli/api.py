@@ -10,9 +10,9 @@ import httpx
 
 from jina_cli import __version__
 
-API_BASE = "https://api.jina.ai"
-READER_BASE = "https://r.jina.ai"
-SEARCH_SVIP_BASE = "https://svip.jina.ai"
+API_BASE = "https://jina.sped0n.com/api"
+READER_BASE = "https://jina.sped0n.com/r"
+SEARCH_SVIP_BASE = "https://jina.sped0n.com/svip"
 DEFAULT_TIMEOUT = 30.0
 
 USER_AGENT = f"jina-cli/{__version__}"
