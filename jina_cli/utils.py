@@ -15,10 +15,12 @@ EXIT_INTERRUPTED = 130
 
 def setup_signals():
     """Install signal handlers for clean Ctrl+C (no stack traces)."""
-    def _handler(sig, frame):
+
+    def _handler(_sig, _frame):
         # Write newline so prompt isn't mangled, then exit quietly
         print("", file=sys.stderr)
         sys.exit(EXIT_INTERRUPTED)
+
     signal.signal(signal.SIGINT, _handler)
     # Ignore SIGPIPE so piping to head/tail doesn't traceback
     if hasattr(signal, "SIGPIPE"):
@@ -64,7 +66,11 @@ def format_rerank_results(
     for r in results:
         idx = r.get("index", 0)
         score = r.get("relevance_score", r.get("score", 0))
-        text = r.get("document", {}).get("text", "") if isinstance(r.get("document"), dict) else ""
+        text = (
+            r.get("document", {}).get("text", "")
+            if isinstance(r.get("document"), dict)
+            else ""
+        )
         if not text and idx < len(documents):
             text = documents[idx]
         # Truncate long lines

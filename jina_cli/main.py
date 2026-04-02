@@ -21,14 +21,13 @@ Exit codes:
     130  interrupted (Ctrl+C)
 """
 
-import sys
 import json
+import sys
 
 import click
 
-from jina_cli import __version__
-from jina_cli import api, utils
-from jina_cli.utils import EXIT_OK, EXIT_USER_ERROR, EXIT_API_ERROR
+from jina_cli import __version__, api, utils
+from jina_cli.utils import EXIT_USER_ERROR
 
 
 class AliasedGroup(click.Group):
@@ -186,9 +185,9 @@ def read(ctx, url, links, images, as_json, api_key):
         _validate_url(u)
 
     try:
-        for i, u in enumerate(urls):
+        for url in urls:
             result = api.read_url(
-                u,
+                url,
                 api_key=key,
                 with_links=links,
                 with_images=images,
@@ -656,9 +655,8 @@ def screenshot(ctx, url, full_page, output, as_json, api_key):
     "-n", "--num", default=10, type=int, help="Number of results (default: 10)"
 )
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
-@click.option("--api-key", default=None, help="Jina API key")
 @click.pass_context
-def bibtex(ctx, query, author, year, num, as_json, api_key):
+def bibtex(ctx, query, author, year, num, as_json):
     """Search for BibTeX citations.
 
     Searches DBLP and Semantic Scholar, deduplicates, and outputs BibTeX entries.
@@ -681,12 +679,11 @@ def bibtex(ctx, query, author, year, num, as_json, api_key):
                 'jina bibtex "transformer" --author Vaswani --year 2017',
             ],
         )
-    key = api_key or ctx.obj.get("api_key")
     timeout = ctx.obj.get("timeout")
 
     try:
         results = api.search_bibtex(
-            query, api_key=key, author=author, year=year, num=num, timeout=timeout
+            query, author=author, year=year, num=num, timeout=timeout
         )
         click.echo(utils.format_bibtex_results(results, as_json=as_json))
     except Exception as e:

@@ -5,44 +5,19 @@ build-backend = "hatchling.build"
 [project]
 name = "jina-cli"
 version = "0.3.0"
-description = "CLI for all Jina AI APIs - search, read, embed, rerank, and more"
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.10"
-authors = [{name = "Jina AI", email = "hello@jina.ai"}]
-keywords = ["jina", "cli", "search", "embeddings", "rerank", "ai", "api", "unix", "agent", "llm-tools", "semantic-search", "web-reader"]
-classifiers = [
-    "Development Status :: 3 - Alpha",
-    "Environment :: Console",
-    "Intended Audience :: Developers",
-    "License :: OSI Approved :: Apache Software License",
-    "Operating System :: OS Independent",
-    "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13",
-    "Topic :: Internet :: WWW/HTTP",
-    "Topic :: Software Development :: Libraries",
-    "Topic :: Text Processing",
-]
-dependencies = [
-    "httpx>=0.27.0",
-    "click>=8.1.0",
-]
+dependencies = ["httpx>=0.27.0", "click>=8.1.0"]
 
-[project.optional-dependencies]
-test = ["pytest>=8.0"]
-
-[project.urls]
-Homepage = "https://jina.ai"
-Documentation = "https://github.com/jina-ai/cli#readme"
-Repository = "https://github.com/jina-ai/cli"
-Issues = "https://github.com/jina-ai/cli/issues"
-Changelog = "https://github.com/jina-ai/cli/releases"
+[dependency-groups]
+dev = ["pytest>=8.0"]
 
 [project.scripts]
 jina = "jina_cli.main:cli"
+
+[tool.uv]
+package = false
 
 [tool.hatch.build.targets.wheel]
 packages = ["jina_cli"]

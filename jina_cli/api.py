@@ -2,7 +2,6 @@
 
 import os
 import sys
-import json
 import time
 from urllib.parse import urlparse
 
@@ -23,7 +22,11 @@ RETRY_BACKOFF = [0.5, 1.0, 2.0]  # seconds between retries
 MAX_RETRY_WAIT = 30.0
 
 _RETRYABLE_STATUS = {429, 500, 502, 503, 504}
-_JINA_RETRY_HOSTS = {"api.jina.ai", "r.jina.ai", "svip.jina.ai"}
+_JINA_RETRY_HOSTS = {
+    urlparse(API_BASE).hostname,
+    urlparse(READER_BASE).hostname,
+    urlparse(SEARCH_SVIP_BASE).hostname,
+} - {None}
 
 
 def get_api_key(api_key: str | None = None) -> str | None:
@@ -609,7 +612,6 @@ def deduplicate(
 
 def search_bibtex(
     query: str,
-    api_key: str | None = None,
     author: str | None = None,
     year: int | None = None,
     num: int = 10,
